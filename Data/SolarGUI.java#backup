@@ -1,0 +1,569 @@
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
+import java.awt.image.ColorModel;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import javax.swing.ImageIcon;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.URL;
+import java.awt.*;
+import java.awt.event.*;
+import java.util.*;
+import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
+//import java.util.prefs.Preferences;
+//import java.util.Timer;
+//import java.text.DecimalFormat;
+import java.text.NumberFormat;
+import java.io.*;
+
+
+public class SolarGUI extends JFrame implements ActionListener, ItemListener, WindowListener{
+    //Deklarationen
+    
+    //Analyse Bild
+    private static BufferedImage image;
+    private static Graphics2D g2d;
+    private static int i_height;
+    private static int i_width; 
+    private static double d_height;
+    private static double d_width;
+    private static int[][] arr_image;
+    
+    //Vorschau Bild
+    private static double d_scale_factor_width;
+    private static double d_scale_factor_height;
+    private static double d_scale_factor_definitiv;
+    private static int i_preview_x;
+    private static int i_preview_y;
+    private static boolean bol_paint = false;
+    
+    //Analyse
+    //private static boolean bol_found_ordinate = false;
+    private static boolean bol_found_ursprung = false;
+    private static boolean bol_found_abszisse = false;
+    private static boolean bol_found_ordinate_breite = true;
+    private static boolean bol_found_abszisse_breite = true;
+    private static int i_ordinate_x;
+    private static int i_ordinate_y;
+    private static int i_ursprung_x;
+    private static int i_ursprung_y;
+    private static int i_abszisse_x;
+    private static int i_abszisse_y;
+    private static int i_ordinate_laenge;
+    private static int i_ordinate_breite;
+    private static int i_ordinate_innenkante_x;
+    private static int i_abszisse_laenge;
+    private static int i_abszisse_breite;
+    private static int i_abszisse_innenkante_y;
+    private static int i_ordinate_offset;
+    private static int i_ursprung_offset;
+    private static int i;
+    private static int j;
+    //math
+    private static int x_delta;
+    private static boolean bol_y = false;
+    private static boolean bol_draw;
+    private static int[] arr_f_values_x;
+    private static int[] arr_f_values_y;
+    private static int i_support_point = 10;
+    private static String[] arr_lg_coeff;
+    private static String[] arr_lg_coeff_part;
+    private static String str_lg_polynom;
+    private static boolean bol_evaluate;
+    private static boolean bol_first_round;
+    
+    //Farbe
+    private static Color color_read;
+    private static int i_color_black = -16777216;
+    private static int i_color_black2 = -16777215;
+    private static int i_color_black3 = -16777214;
+    private static int i_color_black4 = -16777213;
+    private static int i_color_white = -1;
+    private static int i_color_search_counter;
+    private static int i_color_pixelvalue;
+    
+    //File Chooser für das Öffnen eines Bildes
+    private static JFileChooser chooser_open_picture;
+    private static FileNameExtensionFilter filter;
+    private static int i_return_value;
+    
+    //enum für states
+    private static enum State{FAIL, INIT, RESET, ANALYZE, OPEN_IMAGE, WAIT};
+    private static State state;
+    private static State old_state;
+    private static String str_fail;
+    
+    //Buttons
+    private static JButton btn_open_picture;
+    private static JButton btn_analyze_picture;
+   
+    //Labels
+    private static JLabel lbl_bild_einfuegen = null;
+       
+    /**
+     * Konstruktor
+     */
+    public SolarGUI(){
+        //Layout
+        setTitle("Solar Panel Optimizer \u00a9 Nico");
+        setSize(720,480);
+        setLayout(null);
+        getContentPane().setBackground(new Color(255,251,242)); //setBackground(Color.LIGHT_GRAY);
+        setLocation(100,100);
+        setResizable(false);
+        setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        
+        //open Picture Button
+        btn_open_picture = new JButton("Bild Öffnen");
+        btn_open_picture.setBounds(240,10,235,25);
+        btn_open_picture.addActionListener(this);
+        add(btn_open_picture);
+        
+        //JPanel for picture preview
+        //jp_image = new JPanel(new FlowLayout());
+        //jp_image.setBounds(12,45,690,360);
+        //add(jp_image);
+        
+        //analyze Picture Button
+        btn_analyze_picture = new JButton("Bild Analysieren");
+        btn_analyze_picture.setBounds(240,415,235,25);
+        btn_analyze_picture.setEnabled(false);
+        btn_analyze_picture.addActionListener(this);
+        add(btn_analyze_picture);
+            
+        //
+        lbl_bild_einfuegen = new JLabel("Um ein Diagramm zur Analyse einzufügen, klicken Sie auf Bild Öffnen");
+        lbl_bild_einfuegen.setBounds(170,210,500,25);
+        add(lbl_bild_einfuegen);
+        
+        state = State.INIT;
+        old_state = null;
+        
+        addWindowListener(this);
+        setVisible(true);
+        
+        //start FSM with main
+        main(null);
+    }
+    
+    public void main(String [ ] args){
+        run();
+    }
+    
+    public void run(){
+        while(true){
+            //System.out.println(state+"   "+old_state);
+            //if(state != old_state){
+                //System.out.println("detected state: "+state);
+                switch(state){
+                    case INIT:          init();
+                                        state = State.WAIT;
+                                        break;
+                
+                    case FAIL:          System.out.println("FAILLLLL");
+                                        fail(str_fail);
+                                        state = State.RESET;
+                    break;
+                
+                    case RESET:         reset();
+                                        state = State.WAIT;
+                    break;
+                               
+                    case OPEN_IMAGE:    reset();
+                                        open_picture();
+                                        repaint();
+                                        state = State.WAIT;
+                    break;
+                
+                    case ANALYZE:       System.out.println("analysiere Ordinate");
+                                        analyze_ordinate();
+                                        System.out.println("Ordinate analysiert");
+                                        if(state == State.FAIL){
+                                            break;
+                                        }
+                                        System.out.println("analysiere Abszisse");
+                                        analyze_abszisse();
+                                        System.out.println("Abszisse analysiert");
+                                        if(state == State.FAIL){
+                                            break;
+                                        }
+                                        System.out.println("beginne mit Lagrange Approximation");
+                                        math_function();
+                                        System.out.println("Lagrange Approximation beendet");
+                                        repaint();
+                                        state = State.WAIT;
+                                        System.out.println("state im case analyze: "+state);
+                    break;
+                
+                    case WAIT:          state = State.WAIT;
+                    break;
+                
+                    default:            state = State.WAIT;
+                
+                }
+                //old_state = state;
+            //}
+            try {
+                Thread.sleep(10);
+            }catch(InterruptedException ie) {
+            }
+        }
+    }
+    
+     /**
+     * init state
+     */
+    public void init(){
+        btn_analyze_picture.setEnabled(false);
+    }
+    
+     /**
+     * init state
+     */
+    public void reset(){
+        i_ordinate_x = 0;
+        i_ordinate_y = 0;
+        i_ursprung_x = 0;
+        i_ursprung_y = 0;
+        i_abszisse_x = 0;
+        i_abszisse_y = 0;
+        i_preview_x = 0;
+        i_preview_y = 0;
+        i_ordinate_laenge = 0;
+        i_ordinate_breite = 0;
+        i_abszisse_laenge = 0;
+        i_abszisse_breite = 0;
+        i_ordinate_offset = 0;
+        i_ursprung_offset = 0;
+        i_ordinate_innenkante_x = 0;
+        i_abszisse_innenkante_y = 0;
+        i_color_search_counter = 0;
+        i = 0;
+        j = 0;
+        
+        bol_found_ursprung = false;
+        bol_found_ordinate_breite = false;
+        bol_found_abszisse = false;
+        bol_found_abszisse_breite = false;
+        bol_draw = false;
+    }
+    
+     /**
+     * init fail
+     */
+    public void fail(String str_fail){
+        JOptionPane.showMessageDialog(this,
+        str_fail,
+        "Error",
+        JOptionPane.ERROR_MESSAGE);
+    }
+    
+    /**
+     * analyze ordinate state
+     */
+    public void analyze_ordinate(){
+        try{
+            for(i = i_height; i > 0; i--){
+                for(j = i_width; j > 0; j--){
+                    //Suche nach schwarzem Pixel
+                    if(image.getRGB(j,i) == i_color_black && bol_found_ursprung != true){
+                        //Koordinate des oberen Endes der Ordinate
+                        i_ordinate_x = j;
+                        i_ordinate_y = i;
+                        //Zähle nach unten durch bis Ende Ordinate
+                        while(bol_found_ursprung != true){
+                            if(image.getRGB(j,i) == i_color_white || image.getRGB(j + 50,i) == i_color_black || image.getRGB(j + 50,i) == i_color_black || image.getRGB(j + 50,i) == i_color_black || image.getRGB(j + 50,i) == i_color_black){
+                                //Koordinate des Ursprungs
+                                i_ursprung_x = j;
+                                i_ursprung_y = i - 1; // - 1 um das weisse Pixel abzuzählen
+                                //Länge der Ordinate
+                                i_ordinate_laenge = i_ursprung_y - i_ordinate_y;
+                                //Breite der Ordinate
+                                //while(bol_found_ordinate_breite != true){
+                                //    //Ich schaue ob beide Scan-Punkte dieselbe Farbe besitzen, wenn nicht, dann verschiebe ich den einen ein bisschen, denn es könnte sein, dass der eine Punkt in einem Ordinaten Spickel sitzt
+                                //    if(image.getRGB(j,(i_ordinate_offset+i_ordinate_y + i_ordinate_laenge/2)) != image.getRGB(j,(i_ordinate_y + i_ordinate_laenge/4)) || image.getRGB(j,(i_ordinate_offset+i_ordinate_y + i_ordinate_laenge/2)) != image.getRGB(j,(i_ordinate_y + i_ordinate_laenge/8))){
+                                //        i_ordinate_offset = i_ordinate_offset + 10;
+                                //        j--;
+                                //        System.out.println("schlecht");
+                                //    }
+                                //    //Ich schaue ob ich bereits ausserhalb dert Breite der Ordinate bin, damit ich die Ordinatenbreite bestimmen kann
+                                //    if(image.getRGB(j,(i_ordinate_offset + i_ordinate_y + i_ordinate_laenge/2)) == i_color_white && image.getRGB(j,(i_ordinate_offset + i_ordinate_y + i_ordinate_laenge/4)) == i_color_white && image.getRGB(j,(i_ordinate_offset + i_ordinate_y + i_ordinate_laenge/8)) == i_color_white){
+                                //       i_ordinate_innenkante_x = j - 1; // - 1 um das weisse Pixel abzuzählen
+                                //       bol_found_ordinate_breite = true;
+                                //   }
+                                    j++;
+                                }
+                                //System.out.println("X-Koordinate Ursprung: "+i_ursprung_x+", Y-Koordinate Ursprung: "+i_ursprung_y+", Länge der Ordinate: "+i_ordinate_laenge+", Innenkante der Ordinate: "+i_ordinate_innenkante_x);
+                                System.out.println("X-Koordinate Ursprung: "+i_ursprung_x+", Y-Koordinate Ursprung: "+i_ursprung_y+", Länge der Ordinate: "+i_ordinate_laenge);
+                                bol_found_ursprung = true;
+                            }
+                        }
+                    }
+                    //Pixel counter erhöhen
+                    i_color_search_counter++;
+                }
+            }
+        }catch(ArrayIndexOutOfBoundsException e) {
+           System.out.println("Ursprung kann nicht erfasst werden");
+           str_fail = "Ursprung kann nicht erfasst werden";
+           state = State.FAIL;
+           System.out.println(state);
+        }
+    }
+    
+    /**
+     * analyze abszisse state
+     */
+    public void analyze_abszisse(){
+        j = i_ursprung_x;
+        i = i_ursprung_y;
+        while(bol_found_abszisse != true){
+            try{
+                if(image.getRGB(j++,i) == i_color_white){
+                    i_abszisse_x = j -2; // - 2 um das weisse Pixel und start  abzuzählen
+                    i_abszisse_y = i;
+                    i_abszisse_laenge = i_abszisse_x - i_ursprung_x;
+                    
+                                //Breite der Abszisse
+                                while(bol_found_abszisse_breite != true){
+                                    //Ich schaue ob beide Scan-Punkte dieselbe Farbe besitzen, wenn nicht, dann verschiebe ich den einen ein bisschen, denn es könnte sein, dass der eine Punkt in einem Abszisse Spickel sitzt
+                                    if(image.getRGB(i_ursprung_offset + i_ursprung_x + i_abszisse_laenge/2, i) != image.getRGB(i_ursprung_offset + i_ursprung_x + i_abszisse_laenge/4, i) || image.getRGB(i_ursprung_offset + i_ursprung_x + i_abszisse_laenge/2, i) != image.getRGB(i_ursprung_offset + i_ursprung_x + i_abszisse_laenge/8, i)){
+                                        i_ursprung_offset = i_ursprung_offset + 10;
+                                        i++;
+                                        System.out.println("schlecht");
+                                    }
+                                    //Ich schaue ob ich bereits ausserhalb dert Breite der Abszisse bin, damit ich die Abszissenbreite bestimmen kann
+                                    if(image.getRGB(i_ursprung_offset + i_ursprung_x + i_abszisse_laenge/2, i) == i_color_white && image.getRGB(i_ursprung_offset + i_ursprung_x + i_abszisse_laenge/4, i) == i_color_white && image.getRGB(i_ursprung_offset + i_ursprung_x + i_abszisse_laenge/8, i) == i_color_white){
+                                        i_abszisse_innenkante_y = i + 1; // - 1 um das weisse Pixel abzuzählen
+                                        bol_found_abszisse_breite = true;
+                                    }
+                                    i--;
+                                    System.out.println(i);
+                                }
+
+                    System.out.println("X-Koordinate Abszisse: "+i_abszisse_x+", Y-Koordinate Abszisse: "+i_abszisse_y+", Länge der Abszisse: "+i_abszisse_laenge+", Innenkante der Abszisse: "+i_abszisse_innenkante_y);
+                    bol_found_abszisse = true;
+                }
+            }catch(ArrayIndexOutOfBoundsException e) {
+                bol_found_abszisse = true;
+                str_fail = "Abszisse";
+                state = State.FAIL;
+            }
+        }
+    }
+    
+    /**
+     * open picture
+     */
+    public void open_picture(){
+        chooser_open_picture = new JFileChooser();
+        filter = new FileNameExtensionFilter("JPG & GIF Images", "jpg", "gif");
+        chooser_open_picture.setFileFilter(filter);
+        i_return_value = chooser_open_picture.showOpenDialog(this);
+        if(i_return_value == JFileChooser.APPROVE_OPTION){
+            //Bild laden
+            try {
+                image = ImageIO.read(new File(chooser_open_picture.getSelectedFile().getAbsolutePath()));   //Bild laden
+                i_width = image.getWidth();                                                                 //Anzahl Reihen
+                i_height = image.getHeight();                                                               //Anzahl Zeilen
+                arr_image = new int[i_width][i_height];                                                     //2D Array für Bildfarbinformation Initialisieren
+                i_color_pixelvalue = i_height*i_width;                                                      //Anzahl Pixel
+                btn_analyze_picture.setEnabled(true);
+                repaint();
+            }
+            catch (IOException s) {
+                s.printStackTrace();
+                str_fail = "Konnte das Bild nicht laden";
+                state = State.FAIL;
+            }
+        }
+    }
+    
+    /**
+     * make math function
+     */
+    public void math_function(){
+        int m  = -1;  
+        x_delta = i_abszisse_laenge / i_support_point;  //x intervall aufgrund der mengen an Stützwerten
+        arr_f_values_x = new int[i_support_point];      //Array für x Werte
+        arr_f_values_y = new int[i_support_point];      //Array für y Werte
+        arr_lg_coeff = new String[i_support_point];        //Array für die Lagrange Koeffizienten l
+        arr_lg_coeff_part = new String[i_support_point];   //Array für die Lagrange Teilkoeffizienten
+        bol_evaluate = true;
+        
+        
+        //x values
+        for(int i = 0; i<i_support_point; i++){
+            m += 2;
+            arr_f_values_x[i] = i_ursprung_x + m*(x_delta / 2);
+        }
+        
+        //y values
+        for(int i = 0; i<i_support_point; i++){
+            arr_f_values_y[i] = i_abszisse_innenkante_y-1;
+            bol_y = false;
+            while(bol_y == false){
+                if(image.getRGB(arr_f_values_x[i],arr_f_values_y[i]) == i_color_white){
+                    arr_f_values_y[i]--;
+                }else{
+                    bol_y = true;
+                }
+                System.out.println(arr_f_values_y[i]);
+            }
+        }
+        bol_draw = true;
+        
+        try{
+            //mache lagrange interpolation
+            for(int i = 0; i<i_support_point; i++){            
+                for(int o = 0; o<i_support_point; o++){
+                    bol_evaluate = false;
+
+                    if(arr_f_values_x[o] != arr_f_values_x[i]){     // according to lagrange rule: o != i 
+                        bol_evaluate = true;
+                        System.out.println("refs");
+                    }           
+                
+                    if(bol_evaluate){
+                        arr_lg_coeff_part[o] = "((x-"+arr_f_values_x[o]+")/("+arr_f_values_x[i]+"-"+arr_f_values_x[o]+"))";
+                        System.out.println(arr_lg_coeff_part[o]);
+                        if(arr_lg_coeff[i] == null){    //null*(()/())*(()/()) verhindern
+                            arr_lg_coeff[i] = arr_f_values_y[i]+"*"+arr_lg_coeff_part[o];
+                        }else{
+                            arr_lg_coeff[i] = arr_lg_coeff[i]+"*"+arr_lg_coeff_part[o];
+                        }
+                    }
+                }
+            }
+            //Lagrange Polynom zusammensetzen
+            if(str_lg_polynom == null){
+                str_lg_polynom = arr_lg_coeff[i];
+            }else{
+                str_lg_polynom = str_lg_polynom+"+"+arr_lg_coeff[i];
+            }       
+            System.out.println(str_lg_polynom);
+        }catch(ArrayIndexOutOfBoundsException e) {
+            System.out.println("Funktion konnte nich approximiert werden");
+        }
+    }
+    
+    /**
+     * scaler for x coordinates
+     */
+    public int x_scale(int x_scale){
+        return i_preview_x + (int)(d_scale_factor_definitiv*x_scale);
+    }
+    
+    /**
+     * scaler for y coordinates
+     */
+    public int y_scale(int y_scale){
+        return i_preview_y + (int)(d_scale_factor_definitiv*y_scale);
+    }
+    
+    @Override
+    public void paint(Graphics g) {
+        super.paint(g);
+        g2d = (Graphics2D) g;
+        if(image != null) {
+            //Bild Skalierung
+            d_height = (double)i_height;
+            d_width = (double)i_width;
+            d_scale_factor_width = 690 / d_width; 
+            d_scale_factor_height = 360 / d_height; 
+            //Zeichnen des Bildes im Vorschaufenster
+            if((int)(d_height*d_scale_factor_width) > 360){
+                i_preview_x = 15+345-((int)(d_width*d_scale_factor_height)/2);
+                i_preview_y = 70;
+                g.drawImage(image, i_preview_x, i_preview_y, (int)(d_width*d_scale_factor_height), (int)(d_height*d_scale_factor_height), this);
+                d_scale_factor_definitiv = d_scale_factor_height;
+            }else{
+                i_preview_x = 15;
+                i_preview_y = 70+180-((int)(d_height*d_scale_factor_width)/2);
+                g.drawImage(image, i_preview_x, i_preview_y , (int)(d_width*d_scale_factor_width), (int)(d_height*d_scale_factor_width), this);
+                d_scale_factor_definitiv = d_scale_factor_width;
+            }
+        }     
+        
+        //zeichne Feldrahmen
+        g2d.drawRect(15,70,690,360);
+
+        //zeichne Ordinate
+        g2d.setColor(Color.red);
+        //g2d.setStroke(new BasicStroke(6));
+        //Ordinate
+        g2d.drawLine(x_scale(i_ordinate_x), y_scale(i_ordinate_y), x_scale(i_ursprung_x), y_scale(i_ursprung_y));
+        //Abszisse
+        g2d.drawLine(x_scale(i_ursprung_x), y_scale(i_ursprung_y), x_scale(i_abszisse_x), y_scale(i_abszisse_y));
+        //g.drawRect(15,70,690,360);
+        
+        //Funktion in Diagramm Vorschau zeichnen
+        if(bol_draw == true){
+            //x punkte zeichnen auf der abszisse
+            for(int i = 0; i<i_support_point; i++){
+                g2d.drawLine(x_scale(arr_f_values_x[i]), y_scale(i_abszisse_innenkante_y), x_scale(arr_f_values_x[i]), y_scale(i_abszisse_innenkante_y-20));
+            }
+            //funktionspunkte zeichnen
+            for(int i = 0; i<i_support_point; i++){
+                g2d.setStroke(new BasicStroke(2));
+                g2d.drawLine(x_scale(arr_f_values_x[i]), y_scale(arr_f_values_y[i]), x_scale(arr_f_values_x[i]), y_scale(arr_f_values_y[i]-1));
+            }
+        }
+    }
+    
+    private static void waitProcessing(int iWait){
+        try {
+            Thread.sleep(iWait);
+        }catch(InterruptedException ie) {
+        }
+    }
+        
+    /**
+     * ActionListener
+     */
+    public void actionPerformed(ActionEvent e){
+        // Open a Picture
+        if(e.getSource() == btn_open_picture){
+            state = State.OPEN_IMAGE;
+        }
+        //analyze the picture
+        if(e.getSource() == btn_analyze_picture){
+            state = State.ANALYZE;
+        }
+    }
+    
+     /**
+     * ItemListener
+     */
+    public void itemStateChanged(ItemEvent f){
+        //Listener for choosing a source
+        //if(f.getSource() == jcSource){
+        //}
+    }
+    
+    /**
+     * WindowListener Methoden
+     */
+    public void windowClosing(WindowEvent event){
+        //setPreference();    //safe properties
+        dispose();          //vanish window
+        System.exit(0);     //end application
+    }
+    public void windowIconified(WindowEvent event){ 
+    }
+    public void windowOpened(WindowEvent event){
+    }
+    public void windowClosed(WindowEvent event){
+    }
+    public void windowActivated(WindowEvent event){
+    }
+    public void windowDeiconified(WindowEvent event){
+    }
+    public void windowDeactivated(WindowEvent event){
+    }
+    private void exitForm(WindowEvent event){
+    }
+}
